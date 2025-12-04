@@ -1,46 +1,5 @@
 import re
 import numpy as np
-import pandas as pd
-from collections import defaultdict
-from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import StandardScaler
-import xgboost as xgb
-import joblib
-
-STOPWORDS = {"the", "of", "and", "in", "to", "a", "is", "for", "on", "with", "this", "that", "are", "be", "as", "by", "from"}
-
-def featurize_block(block, doc_stats):
-    text = block["text"].strip()
-    chars = len(text)
-    words = re.findall(r"\S+", text)
-    word_count = len(words)
-    lines = text.count("\n") + 1 if text else 0
-    
-    upper_ratio = sum(1 for c in text if c.isupper()) / max(1, chars)
-    digits_ratio = sum(1 for c in text if c.isdigit()) / max(1, chars)
-    punctuation_ratio = sum(1 for c in text if re.match(r'[^\w\s]', c)) / max(1, chars)
-    avg_word_len = np.mean([len(w) for w in words]) if words else 0.0
-    
-    starts_with_number = bool(re.match(r'^\d+(\.\d+)*', text.strip()))
-    has_numbering = bool(re.match(r'^\d+[\).\s]', text.strip()))
-    ends_with_colon = text.strip().endswith(":")
-    title_like = sum(1 for w in words if w.istitle()) / max(1, word_count)
-    stopword_ratio = sum(1 for w in words if w.lower() in STOPWORDS) / max(1, word_count)
-    short_text = 1 if word_count <= 6 else 0
-    
-    font_size = block.get("font_size", 10)
-    rel_font = font_size / doc_stats.get("median_font", 10) if doc_stats.get("median_font", 10) > 0 else 1.0
-    
-    page = block.get("page", 1)
-    bbox = block.get("bbox", [0, 0, 100, 20])
-    top_norm = bbox[1] / doc_stats.get("page_height", 800)
-    left_norm = bbox[0] / doc_stats.get("page_width", 600)
-    
-    return np.array([
-        word_count, lines, upper_ratio, avg_word_len, digits_ratio, punctuation_ratio,
-        short_text, rel_font, top_norm, left_norm, title_like, stopword_ratio,
-        starts_with_number, has_numbering, ends_with_colon
-    ], dtype=float)
 
 def compute_doc_stats(blocks):
     fonts = [b.get("font_size", 10) for b in blocks if b.get("font_size")]
@@ -56,66 +15,117 @@ def compute_doc_stats(blocks):
         "page_height": max_y if max_y > 0 else 800
     }
 
-def rule_based_label(block, doc_stats):
-    text = block["text"].strip()
-    words = re.findall(r"\S+", text)
-    word_count = len(words)
-    
-    font_size = block.get("font_size", 10)
-    rel_font = font_size / doc_stats.get("median_font", 10)
-    
-    # Rule-based classification: 0=H1, 1=H2, 2=H3, 3=BODY
-    
-    # H1: Single digit followed by space and "H1:" or just single digit with large font
-    if re.match(r'^\d+\s+(H1:|[A-Z])', text) or (re.match(r'^\d+\s', text) and rel_font >= 1.3):
-        return 0, 0.95  # H1
-    
-    # H2: Pattern like "1.1" or "H2:" 
-    elif re.match(r'^\d+\.\d+\s+(H2:|[A-Z])', text) or (re.match(r'^\d+\.\d+\s', text) and rel_font >= 1.1):
-        return 1, 0.9   # H2
-    
-    # H3: Pattern like "1.1.1" or "H3:"
-    elif re.match(r'^\d+\.\d+\.\d+\s+(H3:|[A-Z])', text) or re.match(r'^\d+\.\d+\.\d+\s', text):
-        return 2, 0.85  # H3
-    
-    # BODY: Long text or doesn't match header patterns
-    elif word_count > 15 or (word_count > 5 and not re.match(r'^\d+', text)):
-        return 3, 0.95  # BODY
-    
-    # Default fallback based on font size
-    elif rel_font >= 1.2:
-        return 0, 0.6   # Likely H1
-    elif rel_font >= 1.1:
-        return 1, 0.6   # Likely H2
-    else:
-        return 3, 0.5   # Default to BODY
+# characters to remove / normalize
+_INVIS = [
+    '\u00A0',  # no-break space
+    '\u200B',  # zero width space
+    '\u2060',  # word joiner
+    '\uFEFF',  # BOM
+    '\u00AD',  # soft hyphen
+]
 
-def classify_headers_xgb(blocks):
+def clean_text(s: str) -> str:
+    if not s:
+        return s
+    # Replace invisibles with normal space or remove
+    for ch in _INVIS:
+        s = s.replace(ch, ' ')
+    # collapse many spaces/newlines to single space/newline as appropriate
+    s = re.sub(r'[ \t\f\v]+', ' ', s)
+    # preserve newline boundaries but remove trailing/leading whitespace
+    s = '\n'.join(line.strip() for line in s.splitlines() if line.strip() != '')
+    return s.strip()
+
+def extract_first_line(s: str) -> str:
+    """Return the first non-empty line (after cleaning)."""
+    s = clean_text(s)
+    lines = [ln for ln in s.splitlines() if ln.strip()]
+    return lines[0] if lines else s
+
+# More tolerant header regexes (operate on the first line only)
+RE_H1 = re.compile(r'^\s*(?:(?:\d+\s+)?H1:|(?:\d+\s+)?[A-Z][\w\-]{1,20}:|\d+\s+[A-Z])', re.IGNORECASE)
+RE_H2 = re.compile(r'^\s*(?:(?:\d+\.\d+\s+)?H2:|\d+\.\d+\s+[A-Z])', re.IGNORECASE)
+RE_H3 = re.compile(r'^\s*(?:(?:\d+\.\d+\.\d+\s+)?H3:|\d+\.\d+\.\d+\s+[A-Z])', re.IGNORECASE)
+RE_NUMERIC_PREFIX = re.compile(r'^\s*\d+(?:\.\d+)*\b')
+
+def rule_based_label_block(block, doc_stats):
+    """
+    Improved rule-based label: inspect only the first line. If header is found and the rest
+    of the block contains more words, split externally (see classify_blocks_with_split).
+    Returns (label, confidence, should_split_header_bool)
+    """
+    raw_text = block.get("text", "")
+    text = clean_text(raw_text)
+    first_line = extract_first_line(text)
+    words_first = re.findall(r'\S+', first_line)
+    wc_first = len(words_first)
+
+    font_size = block.get("font_size", None)
+    rel_font = font_size / doc_stats.get("median_font", 10) if font_size else 1.0
+
+    # strong header signals on the first line
+    if RE_H3.match(first_line) or RE_NUMERIC_PREFIX.match(first_line) and first_line.count('.') >= 2:
+        return 2, 0.90, True
+    if RE_H2.match(first_line) or RE_NUMERIC_PREFIX.match(first_line) and first_line.count('.') == 1:
+        return 1, 0.92, True
+    # H1 patterns: starts with digit and "H1" OR very short all-title-like line OR large relative font
+    if RE_H1.match(first_line) or (wc_first <= 8 and sum(1 for w in words_first if w.istitle())/max(1,wc_first) > 0.6) or rel_font >= 1.25:
+        return 0, 0.94, True
+
+    # Fallback: if first line is short but block is long, treat first line as header candidate
+    total_words = len(re.findall(r'\S+', text))
+    if wc_first <= 8 and total_words > 20:
+        # candidate header at top of a long block
+        return 0, 0.75, True
+
+    # Otherwise treat as body
+    return 3, 0.95, False
+
+def classify_blocks_with_split(blocks):
+    """
+    Preprocess each block; if rule says split header from body, create two results.
+    Returns list of classification dicts similar to your previous outputs.
+    """
     if not blocks:
         return []
-    
-    doc_stats = compute_doc_stats(blocks)
-    
-    # Use rule-based classification only for simplicity
+
+    doc_stats = compute_doc_stats(blocks)  # reuse your function
     results = []
+
     for i, block in enumerate(blocks):
-        label, conf = rule_based_label(block, doc_stats)
-        
-        # Default to BODY if no rule matches
-        if label is None:
-            label = 3
-            conf = 0.5
-        
-        level_names = ["H1", "H2", "H3", "BODY"]
-        level_name = level_names[label]
-        
-        results.append({
-            "block_id": block.get("block_id", f"b{i}"),
-            "text": block["text"],
-            "level": label + 1 if label < 3 else None,
-            "level_label": level_name,
-            "confidence": conf,
-            "type": "heading" if label < 3 else "paragraph"
-        })
-    
+        label, conf, should_split = rule_based_label_block(block, doc_stats)
+        text_clean = clean_text(block.get("text", ""))
+
+        if should_split:
+            # Split first line as header, remainder as body
+            first_line = extract_first_line(text_clean)
+            remainder = text_clean[len(first_line):].lstrip("\n\r ").strip()
+            # header result
+            results.append({
+                "block_id": block.get("block_id", f"b{i}") + "_hdr",
+                "text": first_line,
+                "level": label + 1 if label < 3 else None,
+                "level_label": ["H1","H2","H3","BODY"][label],
+                "confidence": conf,
+                "type": "heading" if label < 3 else "paragraph"
+            })
+            if remainder:
+                results.append({
+                    "block_id": block.get("block_id", f"b{i}") + "_body",
+                    "text": remainder,
+                    "level": None,
+                    "level_label": "BODY",
+                    "confidence": 0.95,
+                    "type": "paragraph"
+                })
+        else:
+            # single body block
+            results.append({
+                "block_id": block.get("block_id", f"b{i}"),
+                "text": text_clean,
+                "level": None,
+                "level_label": "BODY",
+                "confidence": conf,
+                "type": "paragraph"
+            })
     return results

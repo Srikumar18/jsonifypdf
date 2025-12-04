@@ -11,7 +11,7 @@ import pytesseract
 from pdf2image import convert_from_path
 import numpy as np
 import cv2
-from xgb_classifier import classify_headers_xgb
+from xgb_classifier import classify_blocks_with_split
 
 # --- Configuration ---
 # If you have Tesseract in a custom path, set it here or via env var
@@ -405,7 +405,7 @@ def process_pdf(pdf_path):
         metadata["avg_ocr_confidence"] = round(total_confidence / block_count, 2)
     
     # Classify headers using XGBoost
-    classified_blocks = classify_headers_xgb(all_blocks_flat)
+    classified_blocks = classify_blocks_with_split(all_blocks_flat)
     
     # Update pages with classified blocks
     block_idx = 0
@@ -413,14 +413,17 @@ def process_pdf(pdf_path):
         page_blocks = []
         while block_idx < len(classified_blocks) and classified_blocks[block_idx]['block_id'].startswith(f"p{page_data['page']}_"):
             block = classified_blocks[block_idx]
-            # Convert to page format
+            # Convert to page format - KEEP ALL CLASSIFICATION DATA
             orig_block = all_blocks_flat[block_idx]
             page_blocks.append({
                 "block_id": block['block_id'],
                 "text": block['text'],
                 "bbox": orig_block['bbox'],
                 "type": block['type'],
-                "ocr_confidence": orig_block['ocr_confidence']
+                "ocr_confidence": orig_block['ocr_confidence'],
+                "level_label": block['level_label'],
+                "level_confidence": block['confidence'],
+                "level": block.get('level')
             })
             block_idx += 1
         page_data["text_blocks"] = page_blocks
