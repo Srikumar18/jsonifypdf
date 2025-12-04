@@ -9,4 +9,4 @@ pillow
 PyMuPDF
 pdfplumber
 python-multipart
-"fastapi[all]"
+fastapi[all]
