@@ -20,7 +20,8 @@ const Sidebar = () => {
         addSession,
         loadSession,
         sessions,
-        openPDFViewer
+        openPDFViewer,
+        currentFile
     } = useStore();
 
     const [isSavedOpen, setIsSavedOpen] = React.useState(true);
@@ -34,10 +35,8 @@ const Sidebar = () => {
         const file = event.target.files?.[0];
         if (!file) return;
 
-        // 1️⃣ Add file locally and get its generated ID
         const fileId = uploadFile(file);
 
-        // 2️⃣ Send to backend for extraction
         try {
             const formData = new FormData();
             formData.append('file', file);
@@ -49,12 +48,7 @@ const Sidebar = () => {
             );
 
             if (response.status >= 200 && response.status < 300) {
-                console.log("Extraction response:", response.data);
-
-                // 3️⃣ Save extraction result in session store
                 addSession(fileId, response.data);
-
-                // 4️⃣ Show extracted file in UI
                 setCurrentFile(response.data);
             }
         } catch (err) {
@@ -89,7 +83,8 @@ const Sidebar = () => {
 
                 <button
                     onClick={handleUploadClick}
-                    className="w-full bg-primary text-primary-foreground hover:bg-primary/90 h-10 rounded-md flex items-center justify-center gap-2 text-sm font-medium transition-colors shadow-sm"
+                    className="w-full bg-primary text-primary-foreground hover:bg-primary/90 h-10 rounded-md 
+                               flex items-center justify-center gap-2 text-sm font-medium transition-colors shadow-sm"
                 >
                     <Upload size={16} />
                     Upload PDF
@@ -100,7 +95,8 @@ const Sidebar = () => {
             <div className="flex-1 overflow-y-auto p-2">
                 <button
                     onClick={() => setIsSavedOpen(!isSavedOpen)}
-                    className="w-full flex items-center gap-1 p-2 text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors"
+                    className="w-full flex items-center gap-1 p-2 text-xs font-semibold 
+                               text-muted-foreground hover:text-foreground transition-colors"
                 >
                     {isSavedOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                     SESSION FILES
@@ -109,41 +105,50 @@ const Sidebar = () => {
                 {isSavedOpen && (
                     <div className="space-y-1 mt-1">
                         {files.length === 0 ? (
-                            <p className="text-xs text-muted-foreground px-2 py-1">
-                                No files uploaded
-                            </p>
+                            <p className="text-xs text-muted-foreground px-2 py-1">No files uploaded</p>
                         ) : (
-                            files.map((file) => (
-                                <div
-                                    key={file.id}
-                                    className={clsx(
-                                        "group flex items-center gap-2 p-2 rounded-md text-sm transition-colors hover:bg-accent/50 text-muted-foreground hover:text-foreground"
-                                    )}
-                                >
-                                    <FileText size={16} />
-                                    <span 
-                                        className="truncate flex-1 cursor-pointer"
+                            files.map((file) => {
+                                const session = sessions.find(s => s.fileId === file.id);
+                                const isActive = currentFile && session?.data?.pdf_url === currentFile?.pdf_url;
+
+                                return (
+                                    <div
+                                        key={file.id}
+                                        className={clsx(
+                                            "group flex items-center gap-2 p-2 rounded-md text-sm transition-colors cursor-pointer",
+                                            isActive
+                                                ? "bg-blue-500 text-white border border-blue-600 shadow-sm"
+                                                : "text-muted-foreground hover:text-foreground hover:bg-accent/50"
+                                        )}
                                         onClick={() => loadSession(file.id)}
                                     >
-                                        {file.name}
-                                    </span>
-                                    <button 
-                                        className="opacity-0 group-hover:opacity-100 p-1 hover:bg-background rounded transition-opacity"
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            // Get the session data to find PDF URL
-                                            const session = sessions.find(s => s.fileId === file.id);
-                                            if (session?.data?.pdf_url) {
-                                                // Open PDF viewer modal
-                                                openPDFViewer(session.data.pdf_url, file.name);
-                                            }
-                                        }}
-                                        title="View PDF"
-                                    >
-                                        <Eye size={14} />
-                                    </button>
-                                </div>
-                            ))
+                                        <FileText size={16} />
+
+                                        <span className="truncate flex-1">
+                                            {file.name}
+                                        </span>
+
+                                        {/* View Button */}
+                                        <button
+                                            className={clsx(
+                                                "p-1 rounded transition-opacity",
+                                                isActive
+                                                    ? "text-white hover:bg-blue-600"
+                                                    : "opacity-0 group-hover:opacity-100 hover:bg-background"
+                                            )}
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                if (session?.data?.pdf_url) {
+                                                    openPDFViewer(session.data.pdf_url, file.name, 1);
+                                                }
+                                            }}
+                                            title="View PDF"
+                                        >
+                                            <Eye size={14} />
+                                        </button>
+                                    </div>
+                                );
+                            })
                         )}
                     </div>
                 )}

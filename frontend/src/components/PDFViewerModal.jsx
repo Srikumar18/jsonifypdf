@@ -4,13 +4,24 @@ import { X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 const PDFViewerModal = () => {
-    const { pdfViewerOpen, pdfViewerUrl, pdfViewerTitle, closePDFViewer } = useStore();
+    const {
+        pdfViewerOpen,
+        pdfViewerUrl,
+        pdfViewerTitle,
+        pdfViewerPage,   // ← NEW
+        closePDFViewer
+    } = useStore();
 
     const handleBackdropClick = (e) => {
         if (e.target === e.currentTarget) {
             closePDFViewer();
         }
     };
+
+    // Build the viewer URL with page parameter
+    const viewerSrc = pdfViewerUrl
+        ? `http://localhost:8000${pdfViewerUrl}#page=${pdfViewerPage || 1}`
+        : null;
 
     return (
         <AnimatePresence>
@@ -45,9 +56,9 @@ const PDFViewerModal = () => {
 
                         {/* PDF Content */}
                         <div className="flex-1 overflow-hidden">
-                            {pdfViewerUrl && (
+                            {viewerSrc && (
                                 <iframe
-                                    src={`http://localhost:8000${pdfViewerUrl}`}
+                                    src={viewerSrc}
                                     className="w-full h-full border-0"
                                     title={pdfViewerTitle || 'PDF Document'}
                                 />
