@@ -14,4 +14,4 @@ scikit-learn
 numpy
 pandas
 joblib
-"fastapi[all]"
+fastapi[all]

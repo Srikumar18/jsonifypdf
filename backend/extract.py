@@ -362,21 +362,42 @@ def process_pdf(pdf_path):
 
             # 3. Extract Images (PyMuPDF)
             try:
+
                 doc = fitz.open(pdf_path)
-                # fitz pages are 0-indexed
                 f_page = doc[i]
                 image_list = f_page.get_images(full=True)
-                
+
                 for img_index, img in enumerate(image_list):
                     xref = img[0]
-                    # We won't save them to disk to avoid clutter, just list them
-                    # Or we can return a placeholder name
+
+                    # Extract image bytes
+                    pix = fitz.Pixmap(doc, xref)
+
                     img_name = f"page_{page_num}_img_{img_index}.png"
-                    page_data["images"].append(img_name)
+                    img_path = os.path.join("extracted_images", img_name)
+
+                    # Make directory if not exists
+                    print("Here")
+                    os.makedirs("extracted_images", exist_ok=True)
+
+                    # Save the image
+                    if pix.n < 5:  
+                        pix.save(img_path)
+                    else:
+                        # If CMYK, convert to RGB
+                        pix1 = fitz.Pixmap(fitz.csRGB, pix)
+                        pix1.save(img_path)
+                        pix1 = None
+                    
+                    pix = None
+
+                    page_data["images"].append(img_path)
                     metadata["total_images"] += 1
+
                 doc.close()
             except Exception as e:
                 print(f"Image extraction failed: {e}")
+
 
             pages_output.append(page_data)
 
