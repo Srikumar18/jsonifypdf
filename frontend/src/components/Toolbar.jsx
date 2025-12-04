@@ -1,12 +1,5 @@
 import React from 'react';
-import {
-    Layout,
-    FileJson,
-    FileText,
-    Download,
-    Sparkles
-} from 'lucide-react';
-
+import { FileJson } from 'lucide-react';
 import { useStore } from '../store/useStore';
 
 const Toolbar = () => {
@@ -30,23 +23,51 @@ const Toolbar = () => {
         <button
             onClick={onClick}
             className={`
-        flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-all
-        ${primary
+                flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-all
+                ${primary
                     ? 'bg-primary text-primary-foreground hover:bg-primary/90 shadow-sm'
                     : 'text-muted-foreground hover:text-foreground hover:bg-accent'
                 }
-      `}
+            `}
         >
             <Icon size={16} />
             {label}
         </button>
     );
 
-    return (
-        <div className="h-14 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 flex items-center justify-between px-4 sticky top-0 z-10">
-            <div className="flex items-center gap-2">
-                {/* Action buttons removed as per request */}
+    // ⭐ Logo-style welcome screen
+    if (!currentFile) {
+        return (
+            <div className="flex flex-col items-center justify-center h-full w-full select-none gap-4">
+
+                {/* Logo Box */}
+                <div className="bg-gradient-to-r from-blue-600 to-indigo-700 
+                                rounded-xl px-12 py-6 shadow-lg">
+                    <h1 className="text-5xl font-extrabold text-white tracking-tight">
+                        DocMind
+                    </h1>
+                </div>
+
+                {/* Tagline */}
+                <p className="mt-2 text-base text-muted-foreground">
+                    Extract. Understand. Visualize your documents effortlessly.
+                </p>
+
+                {/* Bottom Prompt */}
+                <p className="absolute bottom-10 text-sm text-muted-foreground">
+                    Upload a PDF to get started
+                </p>
             </div>
+        );
+    }
+
+    // ⭐ Normal toolbar
+    return (
+        <div className="h-14 border-b border-border bg-background/95 backdrop-blur 
+                        supports-[backdrop-filter]:bg-background/60 flex items-center 
+                        justify-between px-4 sticky top-0 z-10">
+
+            <div className="flex items-center gap-2"></div>
 
             <div className="flex items-center gap-2">
                 <div className="h-4 w-px bg-border mx-2" />
