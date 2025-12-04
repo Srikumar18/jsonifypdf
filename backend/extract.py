@@ -126,7 +126,6 @@ def extract_structure(classified_blocks):
         "id": "root_1",
         "type": "document",
         "text": "",
-        "normalized_text": "",
         "level": 0,
         "page_refs": [],
         "confidence": 1.0,
@@ -141,7 +140,6 @@ def extract_structure(classified_blocks):
             "id": f"n{len(root['children']) + 1}",
             "type": block['type'],
             "text": block['text'],
-            "normalized_text": clean_text(block['text']).lower(),
             "level": block.get('level', 4),
             "page_refs": [{"page": 1, "block_id": block['block_id']}],
             "confidence": block['confidence']
@@ -155,7 +153,6 @@ def extract_structure(classified_blocks):
             current_h2 = None
             if not root['text']:
                 root['text'] = block['text']
-                root['normalized_text'] = block['text'].lower()
         elif block['level_label'] == 'H2':
             if current_h2:
                 if current_h1:
@@ -193,11 +190,10 @@ def process_pdf(pdf_path):
         "total_pages": 0,
         "total_images": 0,
         "total_tables": 0,
-        "ocr_engine": "Tesseract", # Fallback or if used
+        "ocr_engine": "Tesseract",
         "ocr_version": "5.3.0",
         "avg_ocr_confidence": 0.0,
-        "generated_at": get_timestamp(),
-        "pipeline": ["pdfplumber_v0.10", "camelot_v0.11", "tesseract_5.3.0"]
+        "generated_at": get_timestamp()
     }
     
     pages_output = []
@@ -218,10 +214,8 @@ def process_pdf(pdf_path):
                 "page": page_num,
                 "width": float(width),
                 "height": float(height),
-                "raw_ocr_text": "",
                 "text_blocks": [],
-                "tables": [],
-                "images": []
+                "images_count": 0
             }
             
             # 1. Extract Text Blocks (Digital)
@@ -237,7 +231,7 @@ def process_pdf(pdf_path):
                         img = images[0]
                         # Run Tesseract
                         ocr_data = pytesseract.image_to_data(img, output_type=pytesseract.Output.DICT)
-                        page_data["raw_ocr_text"] = pytesseract.image_to_string(img)
+                        # Raw OCR text removed to reduce bloat
                         
                         # Convert OCR data to blocks
                         n_boxes = len(ocr_data['text'])
@@ -300,7 +294,7 @@ def process_pdf(pdf_path):
                     total_confidence += b["ocr_confidence"]
                     block_count += 1
                     
-                page_data["raw_ocr_text"] = "\n\n".join([b["text"] for b in blocks])
+                # Raw OCR text removed to reduce bloat
 
             # 2. Extract Tables (Camelot) - Only lattice for bordered tables
             try:
@@ -391,7 +385,7 @@ def process_pdf(pdf_path):
                     
                     pix = None
 
-                    page_data["images"].append(img_path)
+                    page_data["images_count"] += 1
                     metadata["total_images"] += 1
 
                 doc.close()
@@ -421,9 +415,7 @@ def process_pdf(pdf_path):
                 "text": block['text'],
                 "bbox": orig_block['bbox'],
                 "type": block['type'],
-                "ocr_confidence": orig_block['ocr_confidence'],
-                "level_label": block['level_label'],
-                "level_confidence": block['confidence']
+                "ocr_confidence": orig_block['ocr_confidence']
             })
             block_idx += 1
         page_data["text_blocks"] = page_blocks
@@ -432,7 +424,7 @@ def process_pdf(pdf_path):
     structure = extract_structure(classified_blocks)
     
     # Summary & Keywords
-    all_text = " ".join([p["raw_ocr_text"] for p in pages_output])
+    all_text = " ".join([" ".join([b["text"] for b in p["text_blocks"]]) for p in pages_output])
     words = re.findall(r'\w+', all_text.lower())
     common_words = Counter(words).most_common(10)
     keywords = [w[0] for w in common_words if len(w[0]) > 3] # Filter short words
@@ -485,14 +477,23 @@ def process_pdf(pdf_path):
             seen_entities.add(key)
             unique_entities.append(e)
 
-    return {
+    # Filter out empty arrays
+    tables = [t for p in pages_output for t in p.get("tables", [])]
+    
+    result = {
         "file": os.path.basename(pdf_path),
         "metadata": metadata,
         "pages": pages_output,
         "structure": structure,
-        "tables": [t for p in pages_output for t in p["tables"]], # Flatten tables list for root
-        "entities": unique_entities,
         "summary": summary,
         "evaluation": evaluation,
         "provenance": provenance
     }
+    
+    # Only include non-empty arrays
+    if tables:
+        result["tables"] = tables
+    if unique_entities:
+        result["entities"] = unique_entities
+        
+    return result
