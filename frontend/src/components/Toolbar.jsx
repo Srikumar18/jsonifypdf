@@ -51,7 +51,7 @@ const Toolbar = () => {
             <div className="flex flex-col items-center justify-center h-full w-full select-none gap-4">
 
                 {/* Logo Box */}
-                <div className="bg-gradient-to-r from-blue-600 to-indigo-700 
+                <div className="bg-gradient-to-r from-black to-gray-800 
                                 rounded-xl px-12 py-6 shadow-lg">
                     <h1 className="text-5xl font-extrabold text-white tracking-tight">
                         DocMind

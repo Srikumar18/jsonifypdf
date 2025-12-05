@@ -14,7 +14,7 @@ const LoadingScreen = () => {
 
             {/* Text */}
             <div className="text-center select-none px-4 py-2 rounded-xl">
-                <h1 className="text-5xl font-extrabold bg-gradient-to-r from-blue-600 to-indigo-700 text-transparent bg-clip-text leading-tight">
+                <h1 className="text-5xl font-extrabold bg-gradient-to-r from-black to-gray-800 text-transparent bg-clip-text leading-tight">
                     Hang On Tight
                 </h1>
                 <p className="mt-3 text-lg text-gray-600">
@@ -25,7 +25,7 @@ const LoadingScreen = () => {
             {/* Animated Bar */}
             <div className="relative w-[60%] mt-10 h-3 rounded-full overflow-hidden">
                 <motion.div
-                    className="absolute top-0 h-full bg-gradient-to-r from-blue-500 to-indigo-600 rounded-full"
+                    className="absolute top-0 h-full bg-gradient-to-r from-black to-gray-700 rounded-full"
                     animate={{
                         // WIDTH changes (grow & shrink)
                         width: ["0%", "100%", "0%", "100%", "0%"],
