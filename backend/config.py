@@ -14,7 +14,7 @@ CORS_ORIGINS = [
     "http://localhost:3000",
     "http://localhost:5173",
     "https://hits-protothon.vercel.app",
-    "https://hits-protothon.vercel.app/"  # Production Vercel URL
+    "*"  # Allow all origins for testing
 ]
 
 # Environment
