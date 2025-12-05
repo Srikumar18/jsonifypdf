@@ -634,14 +634,14 @@ def process_pdf(pdf_path):
     
     # Advanced Keywords Extraction
     all_text = " ".join([" ".join([b["text"] for b in p["text_blocks"]]) for p in pages_output])
-    
+    # Replace 'T' that appears between two lowercase letters with 'ff'
+    all_text = re.sub(r'(?<=[a-zA-Z])T(?=[a-z])', 'ff', all_text)
     # Extract only NLP-based keywords (no technical terms)
     keywords = extract_keywords_advanced(all_text, max_keywords=10)
     
     # Use the distilled summarizer to produce the auto_summary
     try:
-        auto_summary = summarize_text(all_text, max_chunk_chars=1200, min_length=50, max_length=200)
-        #auto_summary = extractive_summarize(all_text, max_sentences=5)
+        auto_summary = summarize_text(all_text, abstractive=True)
         # Clean up whitespace/newlines
         auto_summary = re.sub(r'\s+', ' ', auto_summary).strip()
     except Exception as e:

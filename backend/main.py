@@ -48,9 +48,7 @@ async def extract_pdf_content(file: UploadFile = File(...)):
     mounted_file_path = None
     try:
         # Generate unique filename to avoid conflicts
-        import uuid
-        unique_id = str(uuid.uuid4())[:8]
-        safe_filename = f"{unique_id}_{file.filename}"
+        safe_filename = f"{file.filename}"
         
         # Save uploaded file temporarily for processing
         temp_file_path = f"temp_{safe_filename}"
