@@ -101,8 +101,8 @@ Install the following before running the project:
 ### 1️⃣ Clone the repository
 
 ```bash
-git clone https://github.com/your-username/DocMind.git
-cd DocMind/backend
+git clone https://github.com/your-username/jsonifypdf.git
+cd jsonifypdf/backend
 ```
 
 ### 2️⃣ Create and activate virtual environment
